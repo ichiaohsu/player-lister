@@ -12,18 +12,19 @@ import (
 
 const url = "https://vintagemonster.onefootball.com/api/teams/en/%v.json"
 
-// Player is the struct to store necessary player information
-// for Unmarshaled JSON
+// Player is the atomic struct to store necessary single player information
 type Player struct {
 	Country string `json:"country"`
 	Name    string `json:"name"`
 	Age     string `json:"age"`
 }
 
-// Players is used for storing results of total players
+// Players is used for storing final results of all players
 type Players []Player
 
-// SingleTeam store result of each team in every API request
+// SingleTeam is a Nested struct imitating
+// the structure of each JSON response from API
+// I only implemented related fields in this struct
 type SingleTeam struct {
 	Status  string `json:"status"`
 	Code    int    `json:"code"`
@@ -36,6 +37,7 @@ type SingleTeam struct {
 	} `json:"data"`
 }
 
+// Check if the name of the team is in target list
 func isTeamDesired(name string) bool {
 	var target = []string{"Germany", "England", "France", "Spain", "Manchester Utd", "Arsenal", "Chelsea", "Barcelona", "Real Madrid", "FC Bayern Munich"}
 	for _, v := range target {
@@ -46,6 +48,7 @@ func isTeamDesired(name string) bool {
 	return false
 }
 
+// asyncHTTPGet is ther worker pool for goroutine to conduct asychronous request
 func asyncHTTPGet(id int, jobs <-chan int, results chan<- Players) {
 	for j := range jobs {
 		var httpClient = &http.Client{
@@ -103,15 +106,18 @@ func main() {
 	for i := 1; i <= 10; i++ {
 		res := <-ch
 		for _, player := range res {
-			// If the name of each player is not key in nonDuplicate
-			// insert this player into nonDuplicate
+			// There are some players appear in clubs, e.g.: Bayern Munich,
+			// and National teams, e.g.: Germany
+			// Only if the name of player is not already in the map nonDuplicate
+			// do we insert the player into the map
+			// This could avoid including duplicate players
 			if _, ok := nonDuplicate[player.Name]; !ok {
 				nonDuplicate[player.Name] = player
 			}
 		}
 	}
 
-	// Append non-duplicate players to final result slice
+	// Append non-duplicate players to final result slice results
 	for _, player := range nonDuplicate {
 		results = append(results, player)
 	}
