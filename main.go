@@ -51,6 +51,7 @@ func isTeamDesired(name string) bool {
 // asyncHTTPGet is ther worker pool for goroutine to conduct asychronous request
 func asyncHTTPGet(id int, jobs <-chan int, results chan<- Players) {
 	for j := range jobs {
+
 		var httpClient = &http.Client{
 			Timeout: time.Second * 10,
 		}
@@ -59,6 +60,7 @@ func asyncHTTPGet(id int, jobs <-chan int, results chan<- Players) {
 			fmt.Printf("Team %d GET request error: %v\n", j, err.Error())
 		}
 		defer resp.Body.Close()
+
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			fmt.Printf("Team %d read response body err: %v\n", j, err.Error())
@@ -74,6 +76,7 @@ func asyncHTTPGet(id int, jobs <-chan int, results chan<- Players) {
 			}
 		}
 		if isTeamDesired(jsonResult.Data.Team.Name) {
+			fmt.Printf("Getting %s data...\n", jsonResult.Data.Team.Name)
 			results <- jsonResult.Data.Team.Players
 		}
 	}
@@ -81,7 +84,7 @@ func asyncHTTPGet(id int, jobs <-chan int, results chan<- Players) {
 
 func main() {
 
-	jobs := make(chan int, 3)
+	jobs := make(chan int, 15)
 	ch := make(chan Players, 10)
 
 	var results Players
@@ -92,32 +95,29 @@ func main() {
 	}
 
 	teamID := 1
+	teamCount := 0
+Request:
 	for {
-		jobs <- teamID
-
-		// Break for loop if result channel is full
-		if len(ch) == cap(ch) {
-			break
-		}
-		teamID++
-	}
-	close(jobs)
-
-	for i := 1; i <= 10; i++ {
-		res := <-ch
-		for _, player := range res {
-			// There are some players appear in clubs, e.g.: Bayern Munich,
-			// and National teams, e.g.: Germany
-			// Only if the name of player is not already in the map nonDuplicate
-			// do we insert the player into the map
-			// This could avoid including duplicate players
-			if _, ok := nonDuplicate[player.Name]; !ok {
-				nonDuplicate[player.Name] = player
+		select {
+		case jobs <- teamID:
+			teamID++
+		case res := <-ch:
+			for _, player := range res {
+				// Only take players appear once
+				// by checking if their names are already in keys of nonDuplicate
+				if _, ok := nonDuplicate[player.Name]; !ok {
+					nonDuplicate[player.Name] = player
+				}
+			}
+			teamCount++
+			if teamCount >= 10 {
+				break Request
 			}
 		}
 	}
+	close(jobs)
 
-	// Append non-duplicate players to final result slice results
+	// Append all non-duplicate players to final result slice results
 	for _, player := range nonDuplicate {
 		results = append(results, player)
 	}
@@ -126,6 +126,7 @@ func main() {
 		return results[i].Name < results[j].Name
 	})
 
+	fmt.Printf("\n\nThe full player lists of target team are:\n")
 	for _, value := range results {
 		fmt.Printf("%s; %s; %s\n", value.Name, value.Age, value.Country)
 	}
